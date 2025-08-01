@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>General Purpose SHA-512 Hash Calculator</title>
+  <style>
+    /* Basic styling for the body */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9; /* Light grey background */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh; /* Full viewport height */
+      margin: 0;
+      padding: 20px; /* Add some padding on smaller screens */
+      box-sizing: border-box; /* Include padding in element's total width and height */
+    }
+
+    /* Container for the form */
+    .container {
+      background-color: #fff; /* White background for the form */
+      padding: 30px;
+      border-radius: 10px; /* Rounded corners */
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Soft shadow */
+      width: 100%;
+      max-width: 500px; /* Increased max-width for better input field */
+    }
+
+    /* Heading style */
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333; /* Darker text color */
+    }
+
+    /* Label style */
+    label {
+      display: block; /* Each label on its own line */
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #555; /* Slightly softer text color */
+    }
+
+    /* Input fields (text, textarea) */
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      border: 1px solid #ccc; /* Light grey border */
+      box-sizing: border-box; /* Include padding and border in width */
+      font-size: 16px; /* Ensure good readability */
+      resize: vertical; /* Allow vertical resizing for textarea */
+      min-height: 80px; /* Minimum height for textarea */
+    }
+
+    /* Submit button style */
+    input[type="submit"] {
+      width: 100%;
+      padding: 12px;
+      background-color: #4CAF50; /* Green background */
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease; /* Smooth transition for hover effect */
+    }
+
+    /* Submit button hover effect */
+    input[type="submit"]:hover {
+      background-color: #45a049; /* Slightly darker green on hover */
+    }
+
+    /* Submit button disabled state */
+    input[type="submit"]:disabled {
+      background-color: #cccccc; /* Greyed out when disabled */
+      cursor: not-allowed;
+    }
+
+    /* Output display area */
+    #output {
+      margin-top: 20px;
+      padding: 15px; /* Increased padding for better appearance */
+      background-color: #e8f5e9; /* Light green background for success messages */
+      border-left: 5px solid #4CAF50; /* Green left border */
+      word-wrap: break-word; /* Ensures long hashes wrap correctly */
+      display: none; /* Hidden by default */
+      border-radius: 5px;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Styling for the hashed value within the output */
+    #output code {
+      font-family: 'Courier New', Courier, monospace; /* Monospace font for code */
+      display: block; /* Ensures it takes full width */
+      white-space: pre-wrap; /* Preserves whitespace and wraps long lines */
+      background-color: #f0f8f0; /* Slightly different background for the code itself */
+      padding: 8px;
+      border-radius: 3px;
+      margin-top: 5px;
+      font-weight: bold;
+      color: #2e7d32; /* Darker green for the hash */
+    }
+
+    /* Styling for error messages */
+    #output.error {
+      background-color: #ffebee; /* Light red background for errors */
+      border-left-color: #f44336; /* Red left border for errors */
+      color: #c62828; /* Dark red text for errors */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>General Purpose SHA-512 Hash Calculator</h2>
+
+    <p style="font-size: 0.9em; color: #d32f2f; text-align: center; margin-bottom: 25px; border: 1px solid #f44336; padding: 10px; border-radius: 5px; font-weight: bold;">
+      <strong style="font-size: 1.1em;">IMPORTANT: This is NOT for password storage!</strong><br>
+      SHA-512 is a fast, general-purpose hash, unsuitable for passwords due to its speed. For secure password hashing, use algorithms designed for that purpose, like PBKDF2 or bcrypt, which incorporate "stretching" (many iterations). This tool hashes ANY text, not specifically passwords securely.
+    </p>
+
+    <form id="form">
+      <label for="inputText">Enter Text to Hash:</label>
+      <textarea id="inputText" name="inputText" rows="5" required placeholder="Type any text here to get its SHA-512 hash..."></textarea>
+
+      <input type="submit" value="Calculate SHA-512 Hash" id="submitButton" />
+    </form>
+
+    <div id="output"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const outputDiv = document.getElementById('output');
+    const submitButton = document.getElementById('submitButton');
+
+    // Helper function to convert a string to an ArrayBuffer (UTF-8 encoding)
+    function str2abUtf8(str) {
+      return new TextEncoder().encode(str);
+    }
+
+    // Helper function to convert an ArrayBuffer to a hexadecimal string
+    function ab2hex(buffer) {
+      return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+    }
+
+    // --- Main execution flow ---
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault(); // Prevent default form submission (page reload)
+
+      const inputText = document.getElementById('inputText').value;
+
+      // Basic input validation
+      if (!inputText.trim()) {
+        outputDiv.style.display = 'block';
+        outputDiv.classList.add('error');
+        outputDiv.innerHTML = "❌ Please enter some text to hash.";
+        return;
+      }
+
+      // Show hashing message
+      outputDiv.style.display = 'block';
+      outputDiv.classList.remove('error'); // Remove error class for new operation
+      outputDiv.innerHTML = "Calculating SHA-512 hash...";
+      submitButton.disabled = true; // Disable button during calculation
+
+      try {
+        // Convert the input text to a UTF-8 ArrayBuffer
+        const dataBuffer = str2abUtf8(inputText);
+
+        // Hash the data using SHA-512
+        const hashedBuffer = await window.crypto.subtle.digest(
+          'SHA-512', // The hashing algorithm: SHA-512
+          dataBuffer // The data to hash
+        );
+
+        // Convert the hashed result (ArrayBuffer) to a hexadecimal string
+        const hashedHex = ab2hex(hashedBuffer);
+
+        // Display the results
+        outputDiv.innerHTML = `✅ SHA-512 Hash Calculated:\n` +
+                              `Input Length: ${inputText.length} characters\n` +
+                              `Hash (Hex): <code>${hashedHex}</code>`;
+
+      } catch (err) {
+        // Handle any errors during the hashing process
+        console.error("Error during hashing:", err);
+        outputDiv.classList.add('error'); // Add error class for styling
+        outputDiv.innerHTML = `❌ Error calculating hash: ${err.message || "An unknown error occurred."}`;
+      } finally {
+        // This block will always execute, whether success or error
+        submitButton.disabled = false; // Re-enable the submit button
+      }
+    });
+
+    // Optional: Add a message on page load to indicate readiness
+    window.addEventListener('load', () => {
+        outputDiv.style.display = 'block';
+        outputDiv.textContent = "Ready to calculate SHA-512 hash.";
+        setTimeout(() => {
+            if (outputDiv.textContent === "Ready to calculate SHA-512 hash.") {
+                outputDiv.style.display = 'none';
+            }
+        }, 3000);
+    });
+  </script>
+</body>
+</html>

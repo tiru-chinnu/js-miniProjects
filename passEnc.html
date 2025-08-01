@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Password Hasher with Web Crypto API (PBKDF2)</title>
+  <style>
+    /* Basic styling for the body */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9; /* Light grey background */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh; /* Full viewport height */
+      margin: 0;
+      padding: 20px; /* Add some padding on smaller screens */
+      box-sizing: border-box; /* Include padding in element's total width and height */
+    }
+
+    /* Container for the form */
+    .container {
+      background-color: #fff; /* White background for the form */
+      padding: 30px;
+      border-radius: 10px; /* Rounded corners */
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Soft shadow */
+      width: 100%;
+      max-width: 400px; /* Max width to prevent it from getting too wide */
+    }
+
+    /* Heading style */
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333; /* Darker text color */
+    }
+
+    /* Label style */
+    label {
+      display: block; /* Each label on its own line */
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #555; /* Slightly softer text color */
+    }
+
+    /* Input fields (password, number) */
+    input[type="password"],
+    input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 5px;
+      border: 1px solid #ccc; /* Light grey border */
+      box-sizing: border-box; /* Include padding and border in width */
+      font-size: 16px; /* Ensure good readability */
+    }
+
+    /* Submit button style */
+    input[type="submit"] {
+      width: 100%;
+      padding: 12px;
+      background-color: #4CAF50; /* Green background */
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease; /* Smooth transition for hover effect */
+    }
+
+    /* Submit button hover effect */
+    input[type="submit"]:hover {
+      background-color: #45a049; /* Slightly darker green on hover */
+    }
+
+    /* Submit button disabled state */
+    input[type="submit"]:disabled {
+      background-color: #cccccc; /* Greyed out when disabled */
+      cursor: not-allowed;
+    }
+
+    /* Output display area */
+    #output {
+      margin-top: 20px;
+      padding: 15px; /* Increased padding for better appearance */
+      background-color: #e8f5e9; /* Light green background for success messages */
+      border-left: 5px solid #4CAF50; /* Green left border */
+      word-wrap: break-word; /* Ensures long hashes wrap correctly */
+      display: none; /* Hidden by default */
+      border-radius: 5px;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Styling for the hashed password within the output */
+    #output code {
+      font-family: 'Courier New', Courier, monospace; /* Monospace font for code */
+      display: block; /* Ensures it takes full width */
+      white-space: pre-wrap; /* Preserves whitespace and wraps long lines */
+      background-color: #f0f8f0; /* Slightly different background for the code itself */
+      padding: 8px;
+      border-radius: 3px;
+      margin-top: 5px;
+      font-weight: bold;
+      color: #2e7d32; /* Darker green for the hash */
+    }
+
+    /* Styling for error messages */
+    #output.error {
+      background-color: #ffebee; /* Light red background for errors */
+      border-left-color: #f44336; /* Red left border for errors */
+      color: #c62828; /* Dark red text for errors */
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Password Hasher (PBKDF2)</h2>
+
+    <p style="font-size: 0.9em; color: #888; text-align: center; margin-bottom: 25px;">
+      <strong style="color: #d32f2f;">Important Security Note:</strong> Hashing passwords directly in the browser like this is generally <strong style="color: #d32f2f;">NOT RECOMMENDED for production authentication systems</strong> where the hash is sent to a server. Hashing should primarily occur on the server-side to prevent "pass-the-hash" attacks and protect against exposing the hashing algorithm and salt. This example is for demonstration or specific client-side key derivation purposes only (e.g., deriving an encryption key for client-side data).
+    </p>
+
+    <form id="form">
+      <label for="password">Enter Password:</label>
+      <input type="password" id="password" name="password" required />
+
+      <label for="iterations">Enter Iterations (10000-500000):</label>
+      <input type="number" id="iterations" name="iterations" min="10000" max="500000" value="100000" required />
+
+      <input type="submit" value="Hash Password" id="submitButton" />
+    </form>
+
+    <div id="output"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const outputDiv = document.getElementById('output');
+    const submitButton = document.getElementById('submitButton');
+
+    // Helper function to convert a string to an ArrayBuffer
+    function str2ab(str) {
+      const buf = new ArrayBuffer(str.length);
+      const bufView = new Uint8Array(buf);
+      for (let i = 0, strLen = str.length; i < strLen; i++) {
+        bufView[i] = str.charCodeAt(i);
+      }
+      return buf;
+    }
+
+    // Helper function to convert an ArrayBuffer to a hexadecimal string
+    function ab2hex(buffer) {
+      return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+    }
+
+    // --- Main execution flow ---
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault(); // Prevent default form submission (page reload)
+
+      const password = document.getElementById('password').value;
+      // PBKDF2 uses 'iterations' instead of 'rounds'
+      const iterations = parseInt(document.getElementById('iterations').value, 10);
+
+      // Validate iterations (already done by HTML min/max, but good for JS too)
+      if (iterations < 10000 || iterations > 500000 || isNaN(iterations)) {
+          outputDiv.style.display = 'block';
+          outputDiv.classList.add('error');
+          outputDiv.innerHTML = "❌ Please enter iterations between 10,000 and 500,000.";
+          return;
+      }
+
+      // Show hashing message
+      outputDiv.style.display = 'block';
+      outputDiv.classList.remove('error'); // Remove error class for new operation
+      outputDiv.innerHTML = "Hashing, please wait...";
+      submitButton.disabled = true; // Disable button to prevent multiple submissions
+
+      try {
+        // 1. Generate a cryptographically strong random salt (16 bytes = 128 bits)
+        // A unique salt is crucial for security.
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+
+        // 2. Import the password as a CryptoKey
+        // The password itself isn't the key, but the base for derivation
+        const passwordKey = await window.crypto.subtle.importKey(
+          'raw', // Format: raw bytes
+          str2ab(password), // The password as an ArrayBuffer
+          { name: 'PBKDF2' }, // Algorithm we're using
+          false, // Not extractable (cannot export the key itself)
+          ['deriveBits'] // Can be used to derive bits (the hash)
+        );
+
+        // 3. Derive the key (hash) using PBKDF2
+        // We're deriving 256 bits (32 bytes) of output
+        const derivedBits = await window.crypto.subtle.deriveBits(
+          {
+            name: 'PBKDF2',
+            salt: salt, // Use the generated salt
+            iterations: iterations, // Use the specified number of iterations
+            hash: 'SHA-256' // Use SHA-256 as the underlying PRF (Pseudo-Random Function)
+          },
+          passwordKey, // The imported password key
+          256 // The number of bits to derive (256 bits = 32 bytes)
+        );
+
+        // 4. Convert the derived bits (ArrayBuffer) to a hexadecimal string
+        const hashedPassword = ab2hex(derivedBits);
+        const saltHex = ab2hex(salt); // Also display the salt (important for verification)
+
+        // Display the results
+        outputDiv.innerHTML = `✅ Hashed Password (PBKDF2-SHA256):\n` +
+                              `Iterations: ${iterations}\n` +
+                              `Salt: <code>${saltHex}</code>\n` +
+                              `Hash: <code>${hashedPassword}</code>`;
+
+      } catch (err) {
+        // Handle any errors during the hashing process
+        console.error("Error during hashing:", err);
+        outputDiv.classList.add('error'); // Add error class for styling
+        outputDiv.innerHTML = `❌ Error hashing password: ${err.message || "An unknown error occurred."}`;
+      } finally {
+        // This block will always execute, whether success or error
+        submitButton.disabled = false; // Re-enable the submit button
+      }
+    });
+
+    // Optional: Add a message on page load to indicate readiness
+    window.addEventListener('load', () => {
+        outputDiv.style.display = 'block';
+        outputDiv.textContent = "Ready to hash password using PBKDF2.";
+        setTimeout(() => {
+            if (outputDiv.textContent === "Ready to hash password using PBKDF2.") {
+                outputDiv.style.display = 'none';
+            }
+        }, 3000);
+    });
+  </script>
+</body>
+</html>
